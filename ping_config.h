@@ -7,7 +7,7 @@
 
 #define TIMER1_REPEAT_RATE 		(1000) 	// 5 millisecond repeating timer in microseconds
 
-#define 	NRF_SDH_BLE_GATT_MAX_MTU_SIZE	247
+//#define 	NRF_SDH_BLE_GATT_MAX_MTU_SIZE	247
 
 #define	SEC_PARAM_MITM_1		1
 #define	SEC_PARAM_MITM_0		0

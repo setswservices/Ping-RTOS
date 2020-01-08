@@ -61,7 +61,7 @@
 #include "ble_hrs.h"
 #include "ble_dis.h"
 #include "ble_conn_params.h"
-#include "sensorsim.h"
+//#include "sensorsim.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_soc.h"
 #include "nrf_sdh_ble.h"
@@ -79,36 +79,26 @@
 #include "nrf_ble_gatt.h"
 #include "nrf_ble_qwr.h"
 
+#include "nrf_delay.h"
+
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
 
+#include "ble_ping.h"
 
-#define DEVICE_NAME                         "Nordic_HRM"                            /**< Name of device. Will be included in the advertising data. */
-#define MANUFACTURER_NAME                   "NordicSemiconductor"                   /**< Manufacturer. Will be passed to Device Information Service. */
+#include "ping_config.h"
+#include "Drv_sgtl5000.h"
+
+
+#define DEVICE_NAME                         "Ping"                            /**< Name of device. Will be included in the advertising data. */
+#define MANUFACTURER_NAME                   "PingLLC"                   /**< Manufacturer. Will be passed to Device Information Service. */
 
 #define APP_BLE_OBSERVER_PRIO               3                                       /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 #define APP_BLE_CONN_CFG_TAG                1                                       /**< A tag identifying the SoftDevice BLE configuration. */
 
 #define APP_ADV_INTERVAL                    300                                     /**< The advertising interval (in units of 0.625 ms. This value corresponds to 187.5 ms). */
 #define APP_ADV_DURATION                    18000                                       /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
-
-#define BATTERY_LEVEL_MEAS_INTERVAL         2000                                    /**< Battery level measurement interval (ms). */
-#define MIN_BATTERY_LEVEL                   81                                      /**< Minimum simulated battery level. */
-#define MAX_BATTERY_LEVEL                   100                                     /**< Maximum simulated battery level. */
-#define BATTERY_LEVEL_INCREMENT             1                                       /**< Increment between each simulated battery level measurement. */
-
-#define HEART_RATE_MEAS_INTERVAL            1000                                    /**< Heart rate measurement interval (ms). */
-#define MIN_HEART_RATE                      140                                     /**< Minimum heart rate as returned by the simulated measurement function. */
-#define MAX_HEART_RATE                      300                                     /**< Maximum heart rate as returned by the simulated measurement function. */
-#define HEART_RATE_INCREMENT                10                                      /**< Value by which the heart rate is incremented/decremented for each call to the simulated measurement function. */
-
-#define RR_INTERVAL_INTERVAL                300                                     /**< RR interval interval (ms). */
-#define MIN_RR_INTERVAL                     100                                     /**< Minimum RR interval as returned by the simulated measurement function. */
-#define MAX_RR_INTERVAL                     500                                     /**< Maximum RR interval as returned by the simulated measurement function. */
-#define RR_INTERVAL_INCREMENT               1                                       /**< Value by which the RR interval is incremented/decremented for each call to the simulated measurement function. */
-
-#define SENSOR_CONTACT_DETECTED_INTERVAL    5000                                    /**< Sensor Contact Detected toggle interval (ms). */
 
 #define MIN_CONN_INTERVAL                   MSEC_TO_UNITS(400, UNIT_1_25_MS)        /**< Minimum acceptable connection interval (0.4 seconds). */
 #define MAX_CONN_INTERVAL                   MSEC_TO_UNITS(650, UNIT_1_25_MS)        /**< Maximum acceptable connection interval (0.65 second). */
@@ -132,38 +122,120 @@
 
 #define OSTIMER_WAIT_FOR_QUEUE              2                                       /**< Number of ticks to wait for the timer queue to be ready */
 
+/////////////////////////////////////////////////////////////////////////////////////////////
+//  Variable and Data Structure Declarations                                                                                                                                           //
+/////////////////////////////////////////////////////////////////////////////////////////////
 
-BLE_BAS_DEF(m_bas);                                                 /**< Battery service instance. */
-BLE_HRS_DEF(m_hrs);                                                 /**< Heart rate service instance. */
+BLE_PING_DEF(m_ping);				/**< BLE Ping service instance. */
 NRF_BLE_GATT_DEF(m_gatt);                                           /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                             /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                 /**< Advertising module instance. */
 
-static uint16_t m_conn_handle         = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
-static bool     m_rr_interval_enabled = true;                       /**< Flag for enabling and disabling the registration of new RR interval measurements (the purpose of disabling this is just to test sending HRM without RR interval data. */
+xSemaphoreHandle SendDataMutex = NULL;
+ble_gap_addr_t MAC_Address;
 
-static sensorsim_cfg_t   m_battery_sim_cfg;                         /**< Battery Level sensor simulator configuration. */
-static sensorsim_state_t m_battery_sim_state;                       /**< Battery Level sensor simulator state. */
-static sensorsim_cfg_t   m_heart_rate_sim_cfg;                      /**< Heart Rate sensor simulator configuration. */
-static sensorsim_state_t m_heart_rate_sim_state;                    /**< Heart Rate sensor simulator state. */
-static sensorsim_cfg_t   m_rr_interval_sim_cfg;                     /**< RR Interval sensor simulator configuration. */
-static sensorsim_state_t m_rr_interval_sim_state;                   /**< RR Interval sensor simulator state. */
+uint8_t BLE_buffer[21];
+
+volatile bool bBleConnected = false;
+uint16_t currentConnectionInterval = 0;
+volatile bool bPingConnected = false;
+volatile bool bSendParameters = false;
+
+
+static uint16_t m_conn_handle         = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
 
 static ble_uuid_t m_adv_uuids[] =                                   /**< Universally unique service identifiers. */
 {
-    {BLE_UUID_HEART_RATE_SERVICE, BLE_UUID_TYPE_BLE},
-    {BLE_UUID_BATTERY_SERVICE, BLE_UUID_TYPE_BLE},
     {BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE}
 };
 
-static TimerHandle_t m_battery_timer;                               /**< Definition of battery timer. */
-static TimerHandle_t m_heart_rate_timer;                            /**< Definition of heart rate timer. */
-static TimerHandle_t m_rr_interval_timer;                           /**< Definition of RR interval timer. */
-static TimerHandle_t m_sensor_contact_timer;                        /**< Definition of sensor contact detected timer. */
 
-#if NRF_LOG_ENABLED
 static TaskHandle_t m_logger_thread;                                /**< Definition of Logger thread. */
-#endif
+
+
+// Each I2S access/interrupt provides AUDIO_FRAME_NUM_SAMPLES of 32-bit stereo pairs
+// And, m_i2s_rx_buffer holds two input buffers for double buffering, so twice the size or I2S_BUFFER_SIZE_WORDS long, where "words" are 32-bit pairs
+// So, each vector is I2S_BUFFER_SIZE_WORDS * sizeof(uint32_t) bytes long
+// And each buffer contains AUDIO_FRAME_NUM_SAMPLES 32-bit pairs
+
+
+uint32_t  m_i2s_tx_buffer[I2S_BUFFER_SIZE_WORDS];
+uint32_t  m_i2s_rx_buffer[I2S_BUFFER_SIZE_WORDS];
+
+int16_t Rx_Buffer[FFT_SAMPLE_SIZE * 2];	// twice the number of stereo pairs
+
+static uint32_t sample_idx          = 0;
+
+#define SAMPLE_LEN                  67200
+static uint8_t * p_sample ;
+
+
+
+static bool i2s_sgtl5000_driver_evt_handler(drv_sgtl5000_evt_t * p_evt)
+{
+    bool ret = false;
+    //NRF_LOG_INFO("i2s_sgtl5000_driver_evt_handler %d", p_evt->evt);
+
+    switch (p_evt->evt)
+    {
+        case DRV_SGTL5000_EVT_I2S_RX_BUF_RECEIVED:
+            {
+                //NRF_LOG_INFO("i2s_sgtl5000_driver_evt_handler RX BUF RECEIVED");
+                // TODO: Handle RX as desired - for this example, we dont use RX for anything
+                //uint16_t * p_buffer  = (uint16_t *) p_evt->param.rx_buf_received.p_data_received;
+            }
+            break;
+        case DRV_SGTL5000_EVT_I2S_TX_BUF_REQ:
+            {
+                //NRF_LOG_INFO("i2s_sgtl5000_driver_evt_handler TX BUF REQ");
+                
+                /* Play sample! 16kHz sample played on 32kHz frequency! If frequency is changed, this approach needs to change. */
+                /* Playback of this 16kHz sample depends on I2S MCK, RATIO, Alignment, format, and channels! Needs to be DIV8, RATIO 128X, alignment LEFT, format I2S, channels LEFT. */
+                
+                uint16_t * p_buffer  = (uint16_t *) p_evt->param.tx_buf_req.p_data_to_send;
+                uint32_t i2s_buffer_size_words = p_evt->param.rx_buf_received.number_of_words;
+                int16_t pcm_stream[i2s_buffer_size_words];  // int16_t - i2s_buffer_size_words size; means we only cover half of data_to_send_buffer, which is fine since we are only using LEFT channel
+                
+                /* Clear pcm buffer */
+                memset(pcm_stream, 0, sizeof(pcm_stream));
+
+                /* Check if playing the next part of the sample will exceed the sample size, if not, copy over part of sample to be played */
+                if (sample_idx < SAMPLE_LEN)
+                {
+                    /* Copy sample bytes into pcm_stream (or remaining part of sample). This should fill up half the actual I2S transmit buffer. */
+                    /* We only want half becuase the sample is a 16kHz sample, and we are running the SGTL500 at 32kHz; see DRV_SGTL5000_FS_31250HZ */
+                    uint32_t bytes_to_copy = ((sample_idx + sizeof(pcm_stream)) < SAMPLE_LEN) ? sizeof(pcm_stream) : SAMPLE_LEN - sample_idx - 1;
+                    memcpy(pcm_stream, &p_sample[sample_idx], bytes_to_copy);
+                    sample_idx += bytes_to_copy;
+                    ret = true;
+                }
+                else 
+                {
+                    /* End of buffer reached. */
+                    sample_idx = 0;
+                    ret = false;
+                }
+                
+                /* Upsample the decompressed audio */
+                /* i < i2s_buffer_size_words * 2 because we have a uint16_t buffer pointer */
+                for (int i = 0, pcm_stream_idx = 0; i < i2s_buffer_size_words * 2; i += 2)
+                {
+                    for (int j = i; j < (i + 2); ++j)
+                    {
+                        p_buffer[j] = pcm_stream[pcm_stream_idx];
+                    }
+                    ++pcm_stream_idx;
+                }
+            }
+            break;
+    }
+
+    return ret;
+}
+
+
+
+
 
 static void advertising_start(void * p_erase_bonds);
 
@@ -283,163 +355,6 @@ static void pm_evt_handler(pm_evt_t const * p_evt)
 }
 
 
-/**@brief Function for performing battery measurement and updating the Battery Level characteristic
- *        in Battery Service.
- */
-static void battery_level_update(void)
-{
-    ret_code_t err_code;
-    uint8_t  battery_level;
-
-    battery_level = (uint8_t)sensorsim_measure(&m_battery_sim_state, &m_battery_sim_cfg);
-
-    err_code = ble_bas_battery_level_update(&m_bas, battery_level, BLE_CONN_HANDLE_ALL);
-    if ((err_code != NRF_SUCCESS) &&
-        (err_code != NRF_ERROR_INVALID_STATE) &&
-        (err_code != NRF_ERROR_RESOURCES) &&
-        (err_code != NRF_ERROR_BUSY) &&
-        (err_code != BLE_ERROR_GATTS_SYS_ATTR_MISSING)
-       )
-    {
-        APP_ERROR_HANDLER(err_code);
-    }
-}
-
-
-/**@brief Function for handling the Battery measurement timer time-out.
- *
- * @details This function will be called each time the battery level measurement timer expires.
- *
- * @param[in] xTimer Handler to the timer that called this function.
- *                   You may get identifier given to the function xTimerCreate using pvTimerGetTimerID.
- */
-static void battery_level_meas_timeout_handler(TimerHandle_t xTimer)
-{
-    UNUSED_PARAMETER(xTimer);
-    battery_level_update();
-}
-
-
-/**@brief Function for handling the Heart rate measurement timer time-out.
- *
- * @details This function will be called each time the heart rate measurement timer expires.
- *          It will exclude RR Interval data from every third measurement.
- *
- * @param[in] xTimer Handler to the timer that called this function.
- *                   You may get identifier given to the function xTimerCreate using pvTimerGetTimerID.
- */
-static void heart_rate_meas_timeout_handler(TimerHandle_t xTimer)
-{
-    static uint32_t cnt = 0;
-    ret_code_t      err_code;
-    uint16_t        heart_rate;
-
-    UNUSED_PARAMETER(xTimer);
-
-    heart_rate = (uint16_t)sensorsim_measure(&m_heart_rate_sim_state, &m_heart_rate_sim_cfg);
-
-    cnt++;
-    err_code = ble_hrs_heart_rate_measurement_send(&m_hrs, heart_rate);
-    if ((err_code != NRF_SUCCESS) &&
-        (err_code != NRF_ERROR_INVALID_STATE) &&
-        (err_code != NRF_ERROR_RESOURCES) &&
-        (err_code != NRF_ERROR_BUSY) &&
-        (err_code != BLE_ERROR_GATTS_SYS_ATTR_MISSING)
-       )
-    {
-        APP_ERROR_HANDLER(err_code);
-    }
-
-    // Disable RR Interval recording every third heart rate measurement.
-    // NOTE: An application will normally not do this. It is done here just for testing generation
-    // of messages without RR Interval measurements.
-    m_rr_interval_enabled = ((cnt % 3) != 0);
-}
-
-
-/**@brief Function for handling the RR interval timer time-out.
- *
- * @details This function will be called each time the RR interval timer expires.
- *
- * @param[in] xTimer Handler to the timer that called this function.
- *                   You may get identifier given to the function xTimerCreate using pvTimerGetTimerID.
- */
-static void rr_interval_timeout_handler(TimerHandle_t xTimer)
-{
-    UNUSED_PARAMETER(xTimer);
-
-    if (m_rr_interval_enabled)
-    {
-        uint16_t rr_interval;
-
-        rr_interval = (uint16_t)sensorsim_measure(&m_rr_interval_sim_state,
-                                                  &m_rr_interval_sim_cfg);
-        ble_hrs_rr_interval_add(&m_hrs, rr_interval);
-    }
-}
-
-
-/**@brief Function for handling the Sensor Contact Detected timer time-out.
- *
- * @details This function will be called each time the Sensor Contact Detected timer expires.
- *
- * @param[in] xTimer Handler to the timer that called this function.
- *                   You may get identifier given to the function xTimerCreate using pvTimerGetTimerID.
- */
-static void sensor_contact_detected_timeout_handler(TimerHandle_t xTimer)
-{
-    static bool sensor_contact_detected = false;
-
-    UNUSED_PARAMETER(xTimer);
-
-    sensor_contact_detected = !sensor_contact_detected;
-    ble_hrs_sensor_contact_detected_update(&m_hrs, sensor_contact_detected);
-}
-
-
-/**@brief Function for the Timer initialization.
- *
- * @details Initializes the timer module. This creates and starts application timers.
- */
-static void timers_init(void)
-{
-    // Initialize timer module.
-    ret_code_t err_code = app_timer_init();
-    APP_ERROR_CHECK(err_code);
-
-    // Create timers.
-    m_battery_timer = xTimerCreate("BATT",
-                                   BATTERY_LEVEL_MEAS_INTERVAL,
-                                   pdTRUE,
-                                   NULL,
-                                   battery_level_meas_timeout_handler);
-    m_heart_rate_timer = xTimerCreate("HRT",
-                                      HEART_RATE_MEAS_INTERVAL,
-                                      pdTRUE,
-                                      NULL,
-                                      heart_rate_meas_timeout_handler);
-    m_rr_interval_timer = xTimerCreate("RRT",
-                                       RR_INTERVAL_INTERVAL,
-                                       pdTRUE,
-                                       NULL,
-                                       rr_interval_timeout_handler);
-    m_sensor_contact_timer = xTimerCreate("SCT",
-                                          SENSOR_CONTACT_DETECTED_INTERVAL,
-                                          pdTRUE,
-                                          NULL,
-                                          sensor_contact_detected_timeout_handler);
-
-    /* Error checking */
-    if ( (NULL == m_battery_timer)
-         || (NULL == m_heart_rate_timer)
-         || (NULL == m_rr_interval_timer)
-         || (NULL == m_sensor_contact_timer) )
-    {
-        APP_ERROR_HANDLER(NRF_ERROR_NO_MEM);
-    }
-}
-
-
 /**@brief Function for the GAP initialization.
  *
  * @details This function sets up all the necessary GAP (Generic Access Profile) parameters of the
@@ -513,44 +428,6 @@ static void services_init(void)
     err_code = nrf_ble_qwr_init(&m_qwr, &qwr_init);
     APP_ERROR_CHECK(err_code);
 
-    // Initialize Heart Rate Service.
-    body_sensor_location = BLE_HRS_BODY_SENSOR_LOCATION_FINGER;
-
-    memset(&hrs_init, 0, sizeof(hrs_init));
-
-    hrs_init.evt_handler                 = NULL;
-    hrs_init.is_sensor_contact_supported = true;
-    hrs_init.p_body_sensor_location      = &body_sensor_location;
-
-    // Here the sec level for the Heart Rate Service can be changed/increased.
-    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&hrs_init.hrs_hrm_attr_md.cccd_write_perm);
-    BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&hrs_init.hrs_hrm_attr_md.read_perm);
-    BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&hrs_init.hrs_hrm_attr_md.write_perm);
-
-    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&hrs_init.hrs_bsl_attr_md.read_perm);
-    BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&hrs_init.hrs_bsl_attr_md.write_perm);
-
-    err_code = ble_hrs_init(&m_hrs, &hrs_init);
-    APP_ERROR_CHECK(err_code);
-
-    // Initialize Battery Service.
-    memset(&bas_init, 0, sizeof(bas_init));
-
-    // Here the sec level for the Battery Service can be changed/increased.
-    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&bas_init.battery_level_char_attr_md.cccd_write_perm);
-    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&bas_init.battery_level_char_attr_md.read_perm);
-    BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&bas_init.battery_level_char_attr_md.write_perm);
-
-    BLE_GAP_CONN_SEC_MODE_SET_OPEN(&bas_init.battery_level_report_read_perm);
-
-    bas_init.evt_handler          = NULL;
-    bas_init.support_notification = true;
-    bas_init.p_report_ref         = NULL;
-    bas_init.initial_batt_level   = 100;
-
-    err_code = ble_bas_init(&m_bas, &bas_init);
-    APP_ERROR_CHECK(err_code);
-
     // Initialize Device Information Service.
     memset(&dis_init, 0, sizeof(dis_init));
 
@@ -563,56 +440,6 @@ static void services_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-
-/**@brief Function for initializing the sensor simulators. */
-static void sensor_simulator_init(void)
-{
-    m_battery_sim_cfg.min          = MIN_BATTERY_LEVEL;
-    m_battery_sim_cfg.max          = MAX_BATTERY_LEVEL;
-    m_battery_sim_cfg.incr         = BATTERY_LEVEL_INCREMENT;
-    m_battery_sim_cfg.start_at_max = true;
-
-    sensorsim_init(&m_battery_sim_state, &m_battery_sim_cfg);
-
-    m_heart_rate_sim_cfg.min          = MIN_HEART_RATE;
-    m_heart_rate_sim_cfg.max          = MAX_HEART_RATE;
-    m_heart_rate_sim_cfg.incr         = HEART_RATE_INCREMENT;
-    m_heart_rate_sim_cfg.start_at_max = false;
-
-    sensorsim_init(&m_heart_rate_sim_state, &m_heart_rate_sim_cfg);
-
-    m_rr_interval_sim_cfg.min          = MIN_RR_INTERVAL;
-    m_rr_interval_sim_cfg.max          = MAX_RR_INTERVAL;
-    m_rr_interval_sim_cfg.incr         = RR_INTERVAL_INCREMENT;
-    m_rr_interval_sim_cfg.start_at_max = false;
-
-    sensorsim_init(&m_rr_interval_sim_state, &m_rr_interval_sim_cfg);
-}
-
-
-/**@brief   Function for starting application timers.
- * @details Timers are run after the scheduler has started.
- */
-static void application_timers_start(void)
-{
-    // Start application timers.
-    if (pdPASS != xTimerStart(m_battery_timer, OSTIMER_WAIT_FOR_QUEUE))
-    {
-        APP_ERROR_HANDLER(NRF_ERROR_NO_MEM);
-    }
-    if (pdPASS != xTimerStart(m_heart_rate_timer, OSTIMER_WAIT_FOR_QUEUE))
-    {
-        APP_ERROR_HANDLER(NRF_ERROR_NO_MEM);
-    }
-    if (pdPASS != xTimerStart(m_rr_interval_timer, OSTIMER_WAIT_FOR_QUEUE))
-    {
-        APP_ERROR_HANDLER(NRF_ERROR_NO_MEM);
-    }
-    if (pdPASS != xTimerStart(m_sensor_contact_timer, OSTIMER_WAIT_FOR_QUEUE))
-    {
-        APP_ERROR_HANDLER(NRF_ERROR_NO_MEM);
-    }
-}
 
 
 /**@brief Function for handling the Connection Parameters Module.
@@ -659,7 +486,7 @@ static void conn_params_init(void)
     cp_init.first_conn_params_update_delay = FIRST_CONN_PARAMS_UPDATE_DELAY;
     cp_init.next_conn_params_update_delay  = NEXT_CONN_PARAMS_UPDATE_DELAY;
     cp_init.max_conn_params_update_count   = MAX_CONN_PARAMS_UPDATE_COUNT;
-    cp_init.start_on_notify_cccd_handle    = m_hrs.hrm_handles.cccd_handle;
+    cp_init.start_on_notify_cccd_handle    = BLE_GATT_HANDLE_INVALID;
     cp_init.disconnect_on_fail             = false;
     cp_init.evt_handler                    = on_conn_params_evt;
     cp_init.error_handler                  = conn_params_error_handler;
@@ -677,12 +504,15 @@ static void sleep_mode_enter(void)
 {
     ret_code_t err_code;
 
+
     err_code = bsp_indication_set(BSP_INDICATE_IDLE);
     APP_ERROR_CHECK(err_code);
 
+#ifdef NOTNEC
     // Prepare wakeup buttons.
     err_code = bsp_btn_ble_sleep_mode_prepare();
     APP_ERROR_CHECK(err_code);
+#endif
 
     // Go to system-off mode (this function will not return; wakeup will cause a reset).
     err_code = sd_power_system_off();
@@ -926,12 +756,13 @@ static void log_init(void)
     NRF_LOG_DEFAULT_BACKENDS_INIT();
 }
 
-
+#ifdef NOTNEC
 /**@brief Function for initializing buttons and leds.
  *
  * @param[out] p_erase_bonds  Will be true if the clear bonding button was pressed to wake the application up.
  */
-static void buttons_leds_init(bool * p_erase_bonds)
+static void 
+buttons_leds_init(bool * p_erase_bonds)
 {
     ret_code_t err_code;
     bsp_event_t startup_event;
@@ -944,6 +775,7 @@ static void buttons_leds_init(bool * p_erase_bonds)
 
     *p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
 }
+#endif
 
 
 /**@brief Function for starting advertising. */
@@ -1005,6 +837,367 @@ static void clock_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
+//////////////////////////////////////////////////////////////////////////////
+//  Additional Support Routines
+//////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// The ble_log_mac_address() function retrieves the MAC address and forms a mask name.
+//
+// Parameter(s):
+//
+//	devname		string representing  mask name
+//
+// May terminate in APP_ERROR_CHECK
+//
+//////////////////////////////////////////////////////////////////////////////
+
+void GetMacAddress(void)
+{
+	// Log our BLE address (6 bytes).
+	static uint32_t err_code;
+// Get BLE address.
+//#if (NRF_SD_BLE_API_VERSION >= 3)
+	err_code = sd_ble_gap_addr_get(&MAC_Address);
+//#else
+//	err_code = sd_ble_gap_address_get(&MAC_Address);
+//#endif
+
+	APP_ERROR_CHECK(err_code);
+
+	// Because the NRF_LOG macros only support up to five varargs after the format string, we need to break this into two calls.
+	//NRF_LOG_RAW_INFO("\r\n---------------------------------------------------------------------\r\n");
+	//NRF_LOG_RAW_INFO("\r\nMAC Address = %02X:%02X:%02X:", MAC_Address.addr[5], MAC_Address.addr[4], MAC_Address.addr[3]);
+	//NRF_LOG_RAW_INFO("%02X:%02X:%02X\r\n", MAC_Address.addr[2], MAC_Address.addr[1], MAC_Address.addr[0]);
+
+	//if (devname != NULL)
+	//	sprintf((char *)devname, "-%02X%02X%02X", MAC_Address.addr[2], MAC_Address.addr[1], MAC_Address.addr[0]);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// The Ble_ping_send_data() function sends an arbitrary packet with Packet Type over BLE.   
+//
+// Parameter(s):
+//
+//	PingPacketType		string representing  mask name
+//	BLEpacket			pointer to packet buffer
+//	BLEpacketLen			packet buffer length
+//
+// Returns SDK error number or NRF_SUCCESS
+//
+// May terminate in APP_ERROR_CHECK
+//
+//////////////////////////////////////////////////////////////////////////////
+
+#define	MAX_BLE_RETRIES		20
+
+int Ble_ping_send_data(uint8_t PingPacketType, uint8_t *BLEpacket, uint8_t BLEpacketLen)
+{
+	uint32_t err_code;
+	uint16_t nIdx, nJdx;
+
+	
+	if( BLEpacket == NULL)
+	{
+		return NRF_ERROR_INVALID_DATA;
+	}
+
+	if (m_ping.conn_handle == BLE_CONN_HANDLE_INVALID)
+	{
+		return NRF_ERROR_INVALID_STATE;
+	}	
+
+	if (xSemaphoreTake(SendDataMutex, (portMAX_DELAY - 10)) != pdPASS)
+		APP_ERROR_CHECK(NRF_ERROR_MUTEX_LOCK_FAILED);
+
+
+	memset(BLE_buffer, 0, sizeof(BLE_buffer));
+
+	if(BLEpacketLen > (sizeof(BLE_buffer) - 1))
+	{
+		BLEpacketLen = sizeof(BLE_buffer) - 1;
+	}
+	
+	memcpy(&BLE_buffer[1], BLEpacket, BLEpacketLen);
+
+	
+#if ENABLE_BLE_SEND_DATA_DEBUG
+	NRF_LOG_RAW_INFO("*** Ble_ping_send_data: PingPacketType = %d, Len=%d, BLE_PING_MAX_DATA_LEN = %d\r\n", PingPacketType, BLEpacketLen, BLE_PING_MAX_DATA_LEN);
+#endif
+	
+
+	BLE_buffer[0] = PingPacketType;
+
+	if (m_ping.conn_handle == BLE_CONN_HANDLE_INVALID)
+	{
+		if (xSemaphoreGive(SendDataMutex) != pdPASS)
+			APP_ERROR_CHECK(NRF_ERROR_MUTEX_UNLOCK_FAILED);
+
+		return NRF_ERROR_INVALID_STATE;
+	}
+
+	// We could also check hvx_sent_count, which is getting tracked in ble_ping.c
+
+	for (nJdx = 0; nJdx < 5; nJdx++)
+	{
+		if (hvx_sent_count > 0)
+			vTaskDelay((TickType_t)(pdMS_TO_TICKS(20))); // wait 20 msec
+		else
+			break;
+	}
+
+	for (nIdx = 0; nIdx < MAX_BLE_RETRIES; nIdx++)
+	{
+
+#if ENABLE_BLE_SEND_DATA_DEBUG
+		NRF_LOG_RAW_INFO("[%8d]Ble_ping_send_data:  PT=%02x, Len=%d, \r\n", global_msec_counter, PingPacketType, BLEpacketLen);
+#endif
+
+		ping_ble_msg_len = (BLEpacketLen + 1);
+		err_code = ble_ping_string_send(&m_ping, (uint8_t *)BLE_buffer, &ping_ble_msg_len);
+
+		if (err_code == NRF_ERROR_RESOURCES)
+		{
+			if (nIdx > 3)
+				NRF_LOG_RAW_INFO("[%8d, %d]Ble_ping_send_data:  Insufficient resources, hvx_sent_count=%d, nIdx=%d\r\n", 
+					global_msec_counter, nIdx, hvx_sent_count, nIdx);
+
+			vTaskDelay((TickType_t)(pdMS_TO_TICKS(25 * nIdx)));
+			; // wait 100 msec
+		}
+		else
+			break;
+	}
+
+//
+// We're disabling this as of Rev1.1.62 as it seems like missing a packet 
+// should not stop the therapy session
+//
+
+#ifdef DISABLING_16APR2019
+	if ((err_code != NRF_SUCCESS) && (err_code != NRF_ERROR_INVALID_STATE) && (err_code != NRF_ERROR_RESOURCES) // We'l just miss this data, but don't stop mask
+	)
+	{
+		APP_ERROR_CHECK(err_code);
+	}
+#endif
+
+	if (xSemaphoreGive(SendDataMutex) != pdPASS)
+		APP_ERROR_CHECK(NRF_ERROR_MUTEX_UNLOCK_FAILED);
+
+	return err_code;
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// The AppTask() function is the main application task.  It initializes, manages and controls
+// other functions and tasks that can only be managed after all tasks have been
+// defined and activated.
+//
+// Parameter(s):
+//
+//	pvParameters		void * pointer to arbitrary argument, which is always NULL for us
+//
+//////////////////////////////////////////////////////////////////////////////
+
+
+static void AppTask(void *pvParameters)
+{
+	(void)pvParameters;
+
+	uint32_t err_code = NRF_SUCCESS;
+	uint16_t nIdx, nJdx;
+	uint32_t nSeed = 0;
+
+#if FUNCTION_START_DEBUG
+	NRF_LOG_RAW_INFO("%s Entering ..\r\n", (uint32_t) __func__);
+#endif
+
+
+	// Get MAC Address
+
+	GetMacAddress();
+
+	// Because the NRF_LOG macros only support up to five varargs after the format string, we need to break this into two calls.
+	NRF_LOG_RAW_INFO("\r\n---------------------------------------------------------------------\r\n");
+	NRF_LOG_RAW_INFO("\r\nMAC Address = %02X:%02X:%02X:", MAC_Address.addr[5], MAC_Address.addr[4], MAC_Address.addr[3]);
+	NRF_LOG_RAW_INFO("%02X:%02X:%02X\r\n", MAC_Address.addr[2], MAC_Address.addr[1], MAC_Address.addr[0]);
+
+	// Generate a random seed
+
+	for(nIdx=0; nIdx < 6 ; nIdx++)
+	{
+		nSeed += ((uint32_t) MAC_Address.addr[nIdx] ) << nIdx;	
+	}
+
+	srand(nSeed);
+
+	NRF_LOG_RAW_INFO("Random seed is %d-\r\n", nSeed);
+
+	Timer1_Init(TIMER1_REPEAT_RATE);
+
+	err_code = NRF_LOG_INIT(NULL);
+	APP_ERROR_CHECK(err_code);
+	NRF_LOG_DEFAULT_BACKENDS_INIT();
+
+#ifdef TESTLEDS
+	for(nJdx=LED_1; nJdx <= LED_4; nJdx++)
+	for(nIdx=0; nIdx < 3 ; nIdx++)
+	{
+	nrf_gpio_pin_set(nJdx);
+	nrf_delay_ms(500);
+	nrf_gpio_pin_clear(nJdx);
+	nrf_delay_ms(500);
+	}
+#endif
+
+	// Turn Off LEDs
+	for(nJdx=LED_1; nJdx <= LED_4; nJdx++)  
+	{
+		NRF_LOG_RAW_INFO("LED %d OFF\r\n", nJdx);
+		nrf_gpio_pin_set(nJdx);
+	}
+
+	NRF_LOG_RAW_INFO("Init started\r\n");
+
+	// Enable audio
+	drv_sgtl5000_init_t sgtl_drv_params;
+	sgtl_drv_params.i2s_tx_buffer           = (void*)m_i2s_tx_buffer;
+	sgtl_drv_params.i2s_rx_buffer           = (void*)m_i2s_rx_buffer;
+	sgtl_drv_params.i2s_buffer_size_words   =  I2S_BUFFER_SIZE_WORDS; ; //I2S_BUFFER_SIZE_WORDS/2;
+	sgtl_drv_params.i2s_evt_handler         = i2s_sgtl5000_driver_evt_handler;
+	sgtl_drv_params.fs                      = DRV_SGTL5000_FS_31250HZ;
+
+#ifdef DOING_TX
+	m_i2s_tx_buffer[0] = 167;
+	m_i2s_tx_buffer[I2S_BUFFER_SIZE_WORDS/2] = 167;
+#endif
+
+	NRF_LOG_RAW_INFO("AUDIO_FRAME_NUM_SAMPLES = %d\r\n", AUDIO_FRAME_NUM_SAMPLES);
+	NRF_LOG_RAW_INFO("size of  m_i2s_rx_buffer %d =  %d 32-bit samples\r\n", sizeof(m_i2s_rx_buffer) / sizeof(uint32_t), I2S_BUFFER_SIZE_WORDS);
+	NRF_LOG_RAW_INFO("i2s_initial_Rx_buffer addr1: %d, addr2: %d\r\n", m_i2s_rx_buffer, m_i2s_rx_buffer + I2S_BUFFER_SIZE_WORDS/2);
+
+	drv_sgtl5000_init(&sgtl_drv_params);
+	drv_sgtl5000_stop();
+	NRF_LOG_RAW_INFO("Audio initialization done.\r\n");
+
+	/* Demonstrate Mic loopback */
+	NRF_LOG_RAW_INFO("Loop in main and loopback MIC data.\r\n");
+	drv_sgtl5000_start_mic_listen();
+
+
+
+	for (;;)
+	{
+		uint32_t nIdx, nJdx, nKdx;
+		static bool bBeenHere = false;
+		float fBinSize;
+		uint32_t Dominant_Index;
+
+		if(ElapsedTimeInMilliseconds() > 1000)
+		{
+			// Signal that we want to capture
+			bCaptureRx = true;
+
+			//NRF_LOG_RAW_INFO("StartTime = %d\r\n", ElapsedTimeInMilliseconds());
+
+			// Wait for capture
+			while(bCaptureRx)   nrf_delay_ms(1);
+
+			//NRF_LOG_RAW_INFO("Copied RX in %d msec\r\n", RxTimeDelta);
+
+				
+			//NRF_LOG_RAW_INFO("[%d] Num_Mic_Samples = %d, Mono FFT Sample Size = %d\n\r",ElapsedTimeInMilliseconds(), Num_Mic_Samples, FFT_SAMPLE_SIZE);
+			fBinSize = ( 31250.0 /2 ) / (FFT_SAMPLE_SIZE /2 );
+
+			//sprintf(cOutbuf, "fBinSize = %f\n\r", fBinSize); 	NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+
+			// Convert stereo 16-bit samples to mono float samples, half as many
+			nJdx = 0;
+			nKdx = 0;
+
+			for(nIdx=0; nIdx < FFT_SAMPLE_SIZE * 2; nIdx += 2)
+			{
+				fFFTin[nKdx] = (float)  Rx_Buffer[nIdx];
+				nKdx++;
+
+				//NRF_LOG_RAW_INFO("%8d\r\n",Rx_Buffer[nIdx]);
+			}
+
+			//NRF_LOG_RAW_INFO("Doing FFT\r\n");
+
+			uint32_t BegTime, EndTime, DeltaTime;
+			uint32_t nIterations = 10;
+
+			BegTime = ElapsedTimeInMilliseconds();
+
+			Dominant_Index = ping_fft(fBinSize);
+
+			EndTime = ElapsedTimeInMilliseconds();
+
+			DeltaTime = EndTime - BegTime;
+
+			if((Dominant_Index >= 51) && (Dominant_Index <= 53))
+			{
+				NRF_LOG_RAW_INFO("Dominant_Index = %d\r\n", Dominant_Index);
+				nrf_gpio_pin_clear(LED_3);
+			}
+			else
+			{
+				nrf_gpio_pin_set(LED_3);
+			}
+
+			//   NRF_LOG_RAW_INFO("BegTime = %d EndTime = %d\r\n", BegTime, EndTime);
+			//NRF_LOG_RAW_INFO("For %d Iterations, took %d msec\r\n", nIterations, DeltaTime);
+
+
+			bBeenHere = true;
+		}
+
+		nrf_delay_ms(100);
+		NRF_LOG_FLUSH();
+	}
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// The AppStart() function creates and starts FreeRTOS main application task.
+// Like all task start function, it has two parameters.
+//
+// Parameter(s):
+//
+//	usStackSize	stack size to be used when invoking xTaskCreate()
+//	uxPriority		scheduling priority to be used when invoking xTaskCreate()
+//
+//////////////////////////////////////////////////////////////////////////////
+
+TaskHandle_t m_app_task;
+
+void AppStart(uint16_t usStackSize, portBASE_TYPE uxPriority)
+{
+
+	BaseType_t xReturned = 0;
+
+	NRF_LOG_RAW_INFO("%s Entered ..\r\n", (uint32_t) __func__);
+
+	xReturned = xTaskCreate(AppTask,				/* The task that implements the main applicationl. */
+							"App",		 		/* Text name assigned to the task.  This is just to assist debugging.  The kernel does not use this name itself. */
+							usStackSize, 		/* The size of the stack allocated to the task. */
+							NULL,				/* The parameter is not used, so NULL is passed. */
+							uxPriority,  			/* The priority allocated to the task. */
+							&m_app_task);		/* handle for the task */
+
+	if (xReturned != pdPASS)
+	{
+		NRF_LOG_ERROR("AppTask task not created.");
+		APP_ERROR_CHECK(NRF_ERROR_NO_MEM);
+	}
+}
+
 
 /**@brief Function for application main entry.
  */
@@ -1033,23 +1226,23 @@ int main(void)
     // Configure and initialize the BLE stack.
     ble_stack_init();
 
-    // Initialize modules.
-    timers_init();
-    buttons_leds_init(&erase_bonds);
+    // buttons_leds_init(&erase_bonds);
     gap_params_init();
     gatt_init();
     advertising_init();
     services_init();
-    sensor_simulator_init();
+
     conn_params_init();
     peer_manager_init();
-    application_timers_start();
 
     // Create a FreeRTOS task for the BLE stack.
     // The task will run advertising_start() before entering its loop.
     nrf_sdh_freertos_init(advertising_start, &erase_bonds);
 
     NRF_LOG_INFO("HRS FreeRTOS example started.");
+
+	AppStart(APP_STACKSIZE, 	APP_PRIORITY);
+	
     // Start FreeRTOS scheduler.
     vTaskStartScheduler();
 

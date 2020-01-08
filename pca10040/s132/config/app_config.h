@@ -41,12 +41,13 @@
 // Defines to override those in sdk_config.h
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-#define	TWI_ENABLED				1
+#define	TWI_ENABLED			1
+#define	TWI1_ENABLED			1
 
 #define	NRFX_TWIM_ENABLED 		1
-#define	NRFX_TWIM1_ENABLED		1
+#define NRFX_TWI_ENABLED 		1
 
-//#define	BSP_SIMPLE					1
-//#define	BUTTONS_NUMBER			0
+#define I2S_ENABLED                     1
+
 
 #endif // APP_CONFIG_H

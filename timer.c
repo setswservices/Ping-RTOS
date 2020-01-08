@@ -21,7 +21,6 @@
 
 // Definitions for prototypes, macros and declarations -- Ping-Specific
 
-#define ARM_MATH_CM4
 
 #include "arm_math.h"
 #include "arm_const_structs.h"

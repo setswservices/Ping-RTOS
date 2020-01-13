@@ -167,8 +167,13 @@
       <file file_name="../../../FFT/arm_rfft_fast_f32.c" />
       <file file_name="../../../FFT/arm_rfft_fast_init_f32.c" />
       <file file_name="../../../FFT/arm_sin_f32.c" />
+      <configuration Name="Release" build_exclude_from_build="Yes" />
     </folder>
-    <configuration Name="Release" linker_printf_fp_enabled="Float" />
+    <configuration
+      CMSIS_CORE="Yes"
+      CMSIS_DSP="Cortex-M4 Little Endian With FPU"
+      Name="Release"
+      linker_printf_fp_enabled="Float" />
   </project>
   <configuration Name="Release" c_preprocessor_definitions="NDEBUG" />
   <configuration

@@ -1003,6 +1003,10 @@ int Ble_ping_send_data(uint8_t PingPacketType, uint8_t *BLEpacket, uint8_t BLEpa
 //
 //////////////////////////////////////////////////////////////////////////////
 
+
+#define CAPTURE
+
+#ifndef CAPTURE
 int16_t TestData[256] =
 {
 -13751, 	-31063, -3568, 21496, 16378, -14022, -24752, 7928, 22866, 19673, -6642, -16679, 12597, 23857, 15086, -19363, -26866, 4776, 23593, 9230, 
@@ -1019,6 +1023,8 @@ int16_t TestData[256] =
 24057, 12672, -22657, -29764, 2678, 23269, 11515, -19737, -19143, 14329, 22727, 16667, -13174, -14124, 15657, 23991, 7544, -27141, -23466, 9759, 
 22417, -3219, -32072, -20331, 14605, 23172, 5925, -23154, -7100, 20561, 23189, 3908, -27545, -13579, 17216, 21516,
 };
+#endif  // CAPTURE
+
 
 uint32_t nKdx;
 
@@ -1034,7 +1040,7 @@ static void AppTask(void *pvParameters)
 	NRF_LOG_RAW_INFO("%s Entering ..\r\n", (uint32_t) __func__);
 #endif
 
-
+#ifndef CAPTURE
 			for(nKdx=0; nKdx < FFT_SAMPLE_SIZE; nKdx++)
 			{
 
@@ -1045,6 +1051,7 @@ static void AppTask(void *pvParameters)
 				vTaskDelay((TickType_t)(pdMS_TO_TICKS(20)));
 			}
 
+#endif // CAPTURE
 
 	// Get MAC Address
 
@@ -1064,7 +1071,7 @@ static void AppTask(void *pvParameters)
 
 	srand(nSeed);
 
-	NRF_LOG_RAW_INFO("Random seed is %d-\r\n", nSeed);
+	NRF_LOG_RAW_INFO("Random seed is %d\r\n", nSeed);
 
 	Timer1_Init(TIMER1_REPEAT_RATE);
 
@@ -1105,6 +1112,12 @@ static void AppTask(void *pvParameters)
 
 #endif
 
+	/////////////////////////////////////////////////////////////
+	//  State 1:  Indeterminate, listening for absence of 3200 Hz (dead zone)
+	//  State 2:  Heard 3200 Hz, note time and speed up sampling to 10 times a second
+	//  State 3:  Entered dead zone, keep sampling
+	//  State 4:  
+
 	for (;;)
 	{
 		uint32_t nIdx, nJdx;
@@ -1117,46 +1130,45 @@ static void AppTask(void *pvParameters)
 
 #ifdef CAPTURE
 			// Signal that we want to capture
-			bCaptureRx = true;
+			bDoCaptureRx = true;
 
 			//NRF_LOG_RAW_INFO("StartTime = %d\r\n", ElapsedTimeInMilliseconds());
 
 			// Wait for capture
-			while(bCaptureRx)   vTaskDelay((TickType_t)(pdMS_TO_TICKS(1)));
+			while(bDoCaptureRx)   vTaskDelay((TickType_t)(pdMS_TO_TICKS(1)));
 
-			NRF_LOG_RAW_INFO("Copied RX in %d msec\r\n", RxTimeDelta);
+			//NRF_LOG_RAW_INFO("\r\nCopied RX in %d msec\r\n", RxTimeDelta);
 #endif
 				
 			//NRF_LOG_RAW_INFO("[%d] Num_Mic_Samples = %d, Mono FFT Sample Size = %d\n\r",ElapsedTimeInMilliseconds(), Num_Mic_Samples, FFT_SAMPLE_SIZE);
 			fBinSize = ( 31250.0 /2 ) / (FFT_SAMPLE_SIZE /2 );
 
-			sprintf(cOutbuf, "fBinSize = %f\n\r", fBinSize); 	NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
-			NRF_LOG_RAW_INFO("%s",cOutbuf);
+			//sprintf(cOutbuf, "fBinSize = %f\n\r", fBinSize); 	NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+			//NRF_LOG_RAW_INFO("%s",cOutbuf);
+			//NRF_LOG_FLUSH();
 
 			// Convert stereo 16-bit samples to mono float samples, half as many
 
 #ifdef CAPTURE
 			nJdx = 0;
+			nKdx = 0;
 
 			for(nIdx=0; nIdx < FFT_SAMPLE_SIZE * 2; nIdx += 2)
 			{
-
-				NRF_LOG_RAW_INFO("%8d\r\n",Rx_Buffer[nIdx]);
 							
 				fFFTin[nKdx] = (float)  Rx_Buffer[nIdx];
 
-				nKdx++;
-
-				vTaskDelay((TickType_t)(pdMS_TO_TICKS(20)));
-			}
-#else
-
-
+#ifdef PRINTIT
+				sprintf(cOutbuf, "%6.0f\r\n",fFFTin[nKdx]);
+				NRF_LOG_RAW_INFO("%s",cOutbuf);
+				NRF_LOG_FLUSH();
 #endif
 
-			//NRF_LOG_RAW_INFO("Doing FFT\r\n");
+				nKdx++;
 
-			NRF_LOG_FLUSH();
+				//vTaskDelay((TickType_t)(pdMS_TO_TICKS(20)));
+			}
+#endif
 
 
 			uint32_t BegTime, EndTime, DeltaTime;
@@ -1173,6 +1185,7 @@ static void AppTask(void *pvParameters)
 			//if((Dominant_Index >= 51) && (Dominant_Index <= 53))
 			{
 				NRF_LOG_RAW_INFO("Dominant_Index = %d\r\n", Dominant_Index);
+				NRF_LOG_FLUSH();
 				nrf_gpio_pin_clear(LED_3);
 			}
 			//else
@@ -1187,9 +1200,8 @@ static void AppTask(void *pvParameters)
 			bBeenHere = true;
 
 			////  !!!!!!!!!!!!!!!!!!!!!!
-			NRF_LOG_RAW_INFO("!! WAITING !");
-			while(1) vTaskDelay((TickType_t)(pdMS_TO_TICKS(1000)));
-
+			//NRF_LOG_RAW_INFO("!! WAITING !");
+			//while(1) vTaskDelay((TickType_t)(pdMS_TO_TICKS(1000)));
 			
 		}
 

@@ -42,12 +42,15 @@
 
 #include "drv_sgtl5000.h"
 
-#include "nrf_log.h"
 #include "nrf_delay.h"
 #include "nrf_gpio.h"
 #include "nrf_drv_i2s.h"
 #include "nrf_drv_twi.h"
 #include "string.h"
+
+#include "nrf_log.h"
+#include "nrf_log_ctrl.h"
+#include "nrf_log_default_backends.h"
 
 #include "ping_config.h"
 
@@ -167,7 +170,7 @@ uint32_t Num_Mic_Samples = 0;
 
 int16_t *Current_RX_Buffer;
 
-bool bCaptureRx = false;
+bool bDoCaptureRx = false;
 uint32_t RxTimeBeg, RxTimeDelta;
 
 /* I2S event handler. Based on the module state, will play sample, playback microphone data, or forward events to the application */
@@ -211,17 +214,18 @@ static void i2s_data_handler(nrf_drv_i2s_buffers_t const * p_released,
 		
         if (m_state == SGTL5000_STATE_RUNNING)
         {
-		if(bCaptureRx)
+		if(bDoCaptureRx)
 		{
 
-			NRF_LOG_RAW_INFO("Capturing!!\r\n");
+			//NRF_LOG_RAW_INFO("Capturing!!\r\n");  
+			//NRF_LOG_FLUSH();
 		
 			RxTimeBeg = ElapsedTimeInMilliseconds();
 			Current_RX_Buffer = (int16_t *) p_released->p_rx_buffer ;
 
 			// Capture sample
 			memcpy(Rx_Buffer, Current_RX_Buffer, FFT_SAMPLE_SIZE * sizeof(uint32_t));
-			bCaptureRx = false;
+			bDoCaptureRx = false;
 
 			RxTimeDelta = ElapsedTimeInMilliseconds() -RxTimeBeg ;
 		}

@@ -96,9 +96,11 @@ uint32_t refIndex = 213, testIndex = 0;
 
 
 float32_t fft_out[FFT_SAMPLE_SIZE];
-float32_t fft_magnitude[512];
+float32_t fft_magnitude[FFT_SAMPLE_SIZE];
 arm_rfft_fast_instance_f32 fftInstance;
 uint32_t nIdx, nJdx;
+
+
 
 /* ----------------------------------------------------------------------
 * Max magnitude FFT Bin test
@@ -109,59 +111,70 @@ uint32_t  ping_fft(float fBinSize)
 	float32_t maxValue;
 
 	static bool bBeenHere = false;
-	
 
-        float fMax;
-        uint32_t MaxIdx;
+
+	float fMax;
+	uint32_t MaxIdx;
 
 	// First way
 
-	if(!bBeenHere)
+#ifdef INIT_VECTORS
+	for(nIdx=0 ; nIdx < FFT_SAMPLE_SIZE; nIdx++) 
+	{
+		fft_out[nIdx] = 0.0;
+		fft_magnitude[nIdx] = 0.0;
+	}
+#endif
+
+	//if(!bBeenHere)
 	{
 		arm_rfft_fast_init_f32(&fftInstance, FFT_SAMPLE_SIZE);
-		NRF_LOG_RAW_INFO("Initializing FFT with Sample Size %d\r\n", FFT_SAMPLE_SIZE);
+		//NRF_LOG_RAW_INFO("Initializing FFT with Sample Size %d\r\n", FFT_SAMPLE_SIZE);
+		//NRF_LOG_FLUSH();
 		bBeenHere = true;
 	}
 
-NRF_LOG_FLUSH();
 
 	arm_rfft_fast_f32(&fftInstance, fFFTin, fft_out, 0);
 	arm_cmplx_mag_f32(fft_out, fft_magnitude, FFT_SAMPLE_SIZE);
 	arm_max_f32(fft_out, FFT_SAMPLE_SIZE, &maxValue, &maxindex);
 
-      sprintf(cOutbuf, "Max:[%ld]:%f Output=[",maxindex,maxvalue);
-      NRF_LOG_RAW_INFO("%s\r\n", (uint32_t) cOutbuf);
+#ifdef PRINT_RESULTS    
+	sprintf(cOutbuf, "Max:[%ld]:%f Output=[",maxindex,maxvalue);
+	NRF_LOG_RAW_INFO("%s\r\n", (uint32_t) cOutbuf);
 
-NRF_LOG_FLUSH();
+	NRF_LOG_FLUSH();
+#endif
 
 
-        fMax = 0.0;
-        MaxIdx = 0;
+	fMax = 0.0;
+	MaxIdx = 0;
 	nJdx=0;
-	
-        for(nIdx=0; nIdx<FFT_SAMPLE_SIZE / 2; nIdx++)
-        {
-        
+
+	for(nIdx=0; nIdx<FFT_SAMPLE_SIZE / 2; nIdx++)
+	{
+
 		if(fft_magnitude[nIdx] > fMax)  
 		{
 			fMax = fft_magnitude[nIdx];
 			MaxIdx = nIdx;
 		}
-		  
-		sprintf(cOutbuf, "[%3d] %f  %f %f\r\n", nIdx, fft_out[nJdx], fft_out[nJdx+1], fft_magnitude[nIdx]);
+
+#ifdef PRINT_RESULTS    
+		sprintf(cOutbuf, "[%3d] %8.0f + %8.0fi,  %8.0f -> %8.0f\r\n", nIdx, fft_out[nJdx], fft_out[nJdx+1], fft_magnitude[nIdx], fft_magnitude[nIdx] * 2.0 /FFT_SAMPLE_SIZE);
 		NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
 		vTaskDelay((TickType_t)(pdMS_TO_TICKS(50)));
 		NRF_LOG_FLUSH();
-
+#endif
 
 		nJdx += 2;
-		
-        }
 
-       // sprintf(cOutbuf, "MaxMag = %f, MaxIdx = %d\r\n", fMax, MaxIdx);
-       // NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+	}
 
-#ifndef PRINT_RESULTS      
+	//sprintf(cOutbuf, "MaxMag = %f, MaxIdx = %d\r\n", fMax, MaxIdx);
+	//NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+
+#ifdef PRINT_RESULTS      
 
 	float RealPart, ImaginaryPart, Magnitude, OtherMagnitude;
 
@@ -183,7 +196,7 @@ NRF_LOG_FLUSH();
 		NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
 		NRF_LOG_FLUSH();
 
-		
+
 		ImaginaryPart = fft_out[nIdx+1];
 
 		sprintf(cOutbuf, "  %f", ImaginaryPart);

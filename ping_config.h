@@ -119,7 +119,7 @@ struct ble_ping_s
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Number of stereo pairs per I2S access
-#define AUDIO_FRAME_NUM_SAMPLES                   			256
+#define AUDIO_FRAME_NUM_SAMPLES                   			128
 
 // Size of the Rx buffer in terms of samples, or 32-bit stereo pairs
 #define I2S_BUFFER_SIZE_WORDS               					AUDIO_FRAME_NUM_SAMPLES * 2   // Double buffered, with AUDIO_FRAME_NUM_SAMPLES
@@ -145,7 +145,7 @@ extern float fFFTout[COMPLEX_FFT_SAMPLE_SIZE+2];
 extern char cOutbuf[128];
 
 extern int16_t *Current_RX_Buffer;
-extern bool bCaptureRx;
+extern bool bDoCaptureRx;
 extern int16_t Rx_Buffer[FFT_SAMPLE_SIZE * 2];
 
 extern uint32_t RxTimeBeg;

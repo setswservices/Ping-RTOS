@@ -1003,6 +1003,24 @@ int Ble_ping_send_data(uint8_t PingPacketType, uint8_t *BLEpacket, uint8_t BLEpa
 //
 //////////////////////////////////////////////////////////////////////////////
 
+int16_t TestData[256] =
+{
+-13751, 	-31063, -3568, 21496, 16378, -14022, -24752, 7928, 22866, 19673, -6642, -16679, 12597, 23857, 15086, -19363, -26866, 4776, 23593, 9230, 
+-22033, 	-20760, 13333, 23088, 15742, -13908, -10655, 18543, 23662, 11258, -23047, -19363, 12601, 23472, -1043, -31848, -18924, 15405, 23211, 7052, 
+-22065, 	-5900, 20412, 23319, 6482, -24994, -10347, 18716, 21724, -6584, -32768, -13167, 18959, 21549, -1309, -24989, 589, 21846, 22181, 1459, 
+-24197, 	-590, 22373, 18756, -13143, -32768, -6361, 21525, 18410, -9893, -24029, 7310, 22683, 20411, -5127, -20712, 7970, 23844, 14938, -19492, 
+-30035, 	720, 22737, 12967, -18333, -20842, 12837, 22796, 17716, -12311, -14380, 15344, 23928, 10392, -24696, -23784, 9154, 23072, 2095, -28035, 
+-18982, 15162, 23219, 10016, -19550, -7187, 20086, 23459, 5036, -27703, -16069, 15580, 22021, -7961, -32768, -23602, 10124, 13929, -17325, -32768, 
+-18528, 16865, 20726, -6481, -28806, -3675, 22500, 20305, -9035, -31409, -2527, 21551, 21032, -1943, -20220, 9032, 22766, 21500, -3494, -23245, 
+4267, 23326, 16424, -17946, -31991, -3556, 21750, 8506, -23859, -30009, 4125, 23438, 15652, -14596, -17713, 14109, 24038, 12891, -22073, -25559, 
+6765, 23433, 7817, -23659, -18966, 14714, 23129, 13878, -14979, -8174, 18585, 23725, 7651, -25902, -18563, 13727, 22412, -3819, -31568, -16005,
+17098, 22793, 5195, -22881, -2968, 21781, 22822, 2070, -27568, -9702, 19276, 20400, -10720, -32768, -8797, 20263, 21164, -2325, -23625, 3687, 
+22486, 21742, -4177, -26423, -1075, 22481, 16418, -18051, -32768, -7885, 21290, 15683, -15301, -26012, 6690, 22780, 19445, -8112, -21068, 8933, 
+24057, 12672, -22657, -29764, 2678, 23269, 11515, -19737, -19143, 14329, 22727, 16667, -13174, -14124, 15657, 23991, 7544, -27141, -23466, 9759, 
+22417, -3219, -32072, -20331, 14605, 23172, 5925, -23154, -7100, 20561, 23189, 3908, -27545, -13579, 17216, 21516,
+};
+
+uint32_t nKdx;
 
 static void AppTask(void *pvParameters)
 {
@@ -1015,6 +1033,17 @@ static void AppTask(void *pvParameters)
 #if FUNCTION_START_DEBUG
 	NRF_LOG_RAW_INFO("%s Entering ..\r\n", (uint32_t) __func__);
 #endif
+
+
+			for(nKdx=0; nKdx < FFT_SAMPLE_SIZE; nKdx++)
+			{
+
+				fFFTin[nKdx] = (float)  TestData[nKdx];
+				sprintf(cOutbuf, "[%3d]  %6.0f \n\r", nKdx, fFFTin[nKdx]);
+				NRF_LOG_RAW_INFO("%s",cOutbuf);
+
+				vTaskDelay((TickType_t)(pdMS_TO_TICKS(20)));
+			}
 
 
 	// Get MAC Address
@@ -1038,21 +1067,6 @@ static void AppTask(void *pvParameters)
 	NRF_LOG_RAW_INFO("Random seed is %d-\r\n", nSeed);
 
 	Timer1_Init(TIMER1_REPEAT_RATE);
-
-	err_code = NRF_LOG_INIT(NULL);
-	APP_ERROR_CHECK(err_code);
-	NRF_LOG_DEFAULT_BACKENDS_INIT();
-
-#ifdef TESTLEDS
-	for(nJdx=LED_1; nJdx <= LED_4; nJdx++)
-	for(nIdx=0; nIdx < 3 ; nIdx++)
-	{
-	nrf_gpio_pin_set(nJdx);
-	nrf_delay_ms(500);
-	nrf_gpio_pin_clear(nJdx);
-	nrf_delay_ms(500);
-	}
-#endif
 
 	// Turn Off LEDs
 	for(nJdx=LED_1; nJdx <= LED_4; nJdx++)  
@@ -1080,6 +1094,7 @@ static void AppTask(void *pvParameters)
 	NRF_LOG_RAW_INFO("size of  m_i2s_rx_buffer %d =  %d 32-bit samples\r\n", sizeof(m_i2s_rx_buffer) / sizeof(uint32_t), I2S_BUFFER_SIZE_WORDS);
 	NRF_LOG_RAW_INFO("i2s_initial_Rx_buffer addr1: %d, addr2: %d\r\n", m_i2s_rx_buffer, m_i2s_rx_buffer + I2S_BUFFER_SIZE_WORDS/2);
 
+#ifdef CAPTURE
 	drv_sgtl5000_init(&sgtl_drv_params);
 	drv_sgtl5000_stop();
 	NRF_LOG_RAW_INFO("Audio initialization done.\r\n");
@@ -1088,46 +1103,61 @@ static void AppTask(void *pvParameters)
 	NRF_LOG_RAW_INFO("Loop in main and loopback MIC data.\r\n");
 	drv_sgtl5000_start_mic_listen();
 
-
+#endif
 
 	for (;;)
 	{
-		uint32_t nIdx, nJdx, nKdx;
+		uint32_t nIdx, nJdx;
 		static bool bBeenHere = false;
 		float fBinSize;
 		uint32_t Dominant_Index;
 
 		if(ElapsedTimeInMilliseconds() > 1000)
 		{
+
+#ifdef CAPTURE
 			// Signal that we want to capture
 			bCaptureRx = true;
 
 			//NRF_LOG_RAW_INFO("StartTime = %d\r\n", ElapsedTimeInMilliseconds());
 
 			// Wait for capture
-			while(bCaptureRx)   nrf_delay_ms(1);
+			while(bCaptureRx)   vTaskDelay((TickType_t)(pdMS_TO_TICKS(1)));
 
-			//NRF_LOG_RAW_INFO("Copied RX in %d msec\r\n", RxTimeDelta);
-
+			NRF_LOG_RAW_INFO("Copied RX in %d msec\r\n", RxTimeDelta);
+#endif
 				
 			//NRF_LOG_RAW_INFO("[%d] Num_Mic_Samples = %d, Mono FFT Sample Size = %d\n\r",ElapsedTimeInMilliseconds(), Num_Mic_Samples, FFT_SAMPLE_SIZE);
 			fBinSize = ( 31250.0 /2 ) / (FFT_SAMPLE_SIZE /2 );
 
-			//sprintf(cOutbuf, "fBinSize = %f\n\r", fBinSize); 	NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+			sprintf(cOutbuf, "fBinSize = %f\n\r", fBinSize); 	NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+			NRF_LOG_RAW_INFO("%s",cOutbuf);
 
 			// Convert stereo 16-bit samples to mono float samples, half as many
+
+#ifdef CAPTURE
 			nJdx = 0;
-			nKdx = 0;
 
 			for(nIdx=0; nIdx < FFT_SAMPLE_SIZE * 2; nIdx += 2)
 			{
+
+				NRF_LOG_RAW_INFO("%8d\r\n",Rx_Buffer[nIdx]);
+							
 				fFFTin[nKdx] = (float)  Rx_Buffer[nIdx];
+
 				nKdx++;
 
-				//NRF_LOG_RAW_INFO("%8d\r\n",Rx_Buffer[nIdx]);
+				vTaskDelay((TickType_t)(pdMS_TO_TICKS(20)));
 			}
+#else
+
+
+#endif
 
 			//NRF_LOG_RAW_INFO("Doing FFT\r\n");
+
+			NRF_LOG_FLUSH();
+
 
 			uint32_t BegTime, EndTime, DeltaTime;
 			uint32_t nIterations = 10;
@@ -1140,12 +1170,12 @@ static void AppTask(void *pvParameters)
 
 			DeltaTime = EndTime - BegTime;
 
-			if((Dominant_Index >= 51) && (Dominant_Index <= 53))
+			//if((Dominant_Index >= 51) && (Dominant_Index <= 53))
 			{
 				NRF_LOG_RAW_INFO("Dominant_Index = %d\r\n", Dominant_Index);
 				nrf_gpio_pin_clear(LED_3);
 			}
-			else
+			//else
 			{
 				nrf_gpio_pin_set(LED_3);
 			}
@@ -1155,9 +1185,15 @@ static void AppTask(void *pvParameters)
 
 
 			bBeenHere = true;
+
+			////  !!!!!!!!!!!!!!!!!!!!!!
+			NRF_LOG_RAW_INFO("!! WAITING !");
+			while(1) vTaskDelay((TickType_t)(pdMS_TO_TICKS(1000)));
+
+			
 		}
 
-		nrf_delay_ms(100);
+		vTaskDelay((TickType_t)(pdMS_TO_TICKS(1000)));
 		NRF_LOG_FLUSH();
 	}
 }

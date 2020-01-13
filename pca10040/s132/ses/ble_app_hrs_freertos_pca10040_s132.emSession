@@ -25,6 +25,10 @@
   <ProjectSessionItem path="ble_app_hrs_freertos_pca10040_s132;ble_app_hrs_freertos_pca10040_s132"/>
   <ProjectSessionItem path="ble_app_hrs_freertos_pca10040_s132;ble_app_hrs_freertos_pca10040_s132;Application"/>
   <ProjectSessionItem path="ble_app_hrs_freertos_pca10040_s132;ble_app_hrs_freertos_pca10040_s132;Board Definition"/>
+  <ProjectSessionItem path="ble_app_hrs_freertos_pca10040_s132;ble_app_hrs_freertos_pca10040_s132;Board Support"/>
+  <ProjectSessionItem path="ble_app_hrs_freertos_pca10040_s132;ble_app_hrs_freertos_pca10040_s132;nRF_Libraries"/>
+  <ProjectSessionItem path="ble_app_hrs_freertos_pca10040_s132;ble_app_hrs_freertos_pca10040_s132;nRF_Log"/>
+  <ProjectSessionItem path="ble_app_hrs_freertos_pca10040_s132;ble_app_hrs_freertos_pca10040_s132;Third Parties"/>
  </Project>
  <Register1>
   <RegisterWindow visibleNodes="CPU - Current Context/r0;CPU - Current Context/r1;CPU - Current Context/r2;CPU - Current Context/r3;CPU - Current Context/r4;CPU - Current Context/r5;CPU - Current Context/r6;CPU - Current Context/r7;CPU - Current Context/r8;CPU - Current Context/r9;CPU - Current Context/r10;CPU - Current Context/r11;CPU - Current Context/r12;CPU - Current Context/sp(r13);CPU - Current Context/lr(r14);CPU - Current Context/pc(r15);CPU - Current Context/apsr;CPU/r0;CPU/r1;CPU/r2;CPU/r3;CPU/r4;CPU/r5;CPU/r6;CPU/r7;CPU/r8;CPU/r9;CPU/r10;CPU/r11;CPU/r12;CPU/sp(r13);CPU/lr(r14);CPU/pc(r15);CPU/xpsr;CPU/msp;CPU/psp;CPU/cfbp;CPU/internal" binaryNodes="" asciiNodes="" openNodes="CPU - Current Context" name="ble_app_hrs_freertos_pca10040_s132" decimalNodes="" octalNodes="" unsignedNodes=""/>
@@ -57,7 +61,23 @@
   <Watches active="0" update="Never"/>
  </Watch4>
  <Files>
-  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="1011" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../main.c" selected="1" top="1038" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="1037" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../main.c" selected="1" top="1024" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="12" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../timer.c" selected="0" top="0" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="118" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../nRF5_SDK_15.0.0_a53641a/integration/nrfx/legacy/nrf_drv_twi.h" selected="0" top="118" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="53" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../drv_sgtl5000.c" selected="0" top="51" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="49" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../nRF5_SDK_15.0.0_a53641a/components/libraries/bsp/bsp_btn_ble.c" selected="0" top="28" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="181" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../nRF5_SDK_15.0.0_a53641a/components/libraries/bsp/bsp.c" selected="0" top="155" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="9" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../ping_config.h" selected="0" top="0" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="3848" useTextEdit="1" useBinaryEdit="0" left="0" path="../config/sdk_config.h" selected="0" top="4558" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="771" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../nRF5_SDK_15.0.0_a53641a/external/freertos/source/tasks.c" selected="0" top="754" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="100" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../nRF5_SDK_15.0.0_a53641a/external/freertos/source/portable/MemMang/heap_1.c" selected="0" top="73" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="65" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../config/FreeRTOSConfig.h" selected="0" top="48" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="98" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../nRF5_SDK_15.0.0_a53641a/components/libraries/util/app_error_weak.c" selected="0" top="82" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="72" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../nRF5_SDK_15.0.0_a53641a/components/libraries/util/app_error.c" selected="0" top="56" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="74" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../nRF5_SDK_15.0.0_a53641a/components/libraries/experimental_log/src/nrf_log_backend_uart.c" selected="0" top="50" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="69" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../../nRF5_SDK_15.0.0_a53641a/components/libraries/experimental_log/src/nrf_log_default_backends.c" selected="0" top="53" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="121" useTextEdit="1" useBinaryEdit="0" left="0" path="../../../ping_fft.c" selected="0" top="113" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="52" useTextEdit="1" useBinaryEdit="0" left="0" path="../config/app_config.h" selected="0" top="39" codecName="Default"/>
  </Files>
- <ARMCrossStudioWindow activeProject="ble_app_hrs_freertos_pca10040_s132" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="Release" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="" debugSearchPath="" autoConnectCapabilities="3199"/>
+ <ARMCrossStudioWindow activeProject="ble_app_hrs_freertos_pca10040_s132" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="Release" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="D:/Projects/SmokeAlarm/Ping-RTOS" debugSearchPath="" autoConnectCapabilities="3199"/>
 </session>

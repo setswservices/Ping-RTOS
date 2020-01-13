@@ -7,6 +7,7 @@
 #include "nrf_gpio.h"
 #include "nrf_delay.h"
 #include "nordic_common.h"
+#include "FreeRTOS.h"
 
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
@@ -97,6 +98,7 @@ uint32_t refIndex = 213, testIndex = 0;
 float32_t fft_out[FFT_SAMPLE_SIZE];
 float32_t fft_magnitude[512];
 arm_rfft_fast_instance_f32 fftInstance;
+uint32_t nIdx, nJdx;
 
 /* ----------------------------------------------------------------------
 * Max magnitude FFT Bin test
@@ -105,40 +107,61 @@ uint32_t  ping_fft(float fBinSize)
 {
 	arm_status status;
 	float32_t maxValue;
-	uint32_t nIdx, nJdx;
+
 	static bool bBeenHere = false;
 	
 
         float fMax;
-        uint16_t MaxIdx;
+        uint32_t MaxIdx;
 
 	// First way
 
 	if(!bBeenHere)
 	{
 		arm_rfft_fast_init_f32(&fftInstance, FFT_SAMPLE_SIZE);
+		NRF_LOG_RAW_INFO("Initializing FFT with Sample Size %d\r\n", FFT_SAMPLE_SIZE);
 		bBeenHere = true;
 	}
-	
+
+NRF_LOG_FLUSH();
+
 	arm_rfft_fast_f32(&fftInstance, fFFTin, fft_out, 0);
 	arm_cmplx_mag_f32(fft_out, fft_magnitude, FFT_SAMPLE_SIZE);
-	//arm_max_f32(fft_out, FFT_SAMPLE_SIZE, &maxValue, &testIndex);
+	arm_max_f32(fft_out, FFT_SAMPLE_SIZE, &maxValue, &maxindex);
+
+      sprintf(cOutbuf, "Max:[%ld]:%f Output=[",maxindex,maxvalue);
+      NRF_LOG_RAW_INFO("%s\r\n", (uint32_t) cOutbuf);
+
+NRF_LOG_FLUSH();
+
 
         fMax = 0.0;
         MaxIdx = 0;
+	nJdx=0;
+	
         for(nIdx=0; nIdx<FFT_SAMPLE_SIZE / 2; nIdx++)
         {
-          if(fft_magnitude[nIdx] > fMax)  
-          {
-            fMax = fft_magnitude[nIdx];
-            MaxIdx = nIdx;
-          }
+        
+		if(fft_magnitude[nIdx] > fMax)  
+		{
+			fMax = fft_magnitude[nIdx];
+			MaxIdx = nIdx;
+		}
+		  
+		sprintf(cOutbuf, "[%3d] %f  %f %f\r\n", nIdx, fft_out[nJdx], fft_out[nJdx+1], fft_magnitude[nIdx]);
+		NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+		vTaskDelay((TickType_t)(pdMS_TO_TICKS(50)));
+		NRF_LOG_FLUSH();
+
+
+		nJdx += 2;
+		
         }
 
        // sprintf(cOutbuf, "MaxMag = %f, MaxIdx = %d\r\n", fMax, MaxIdx);
        // NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
 
-#ifdef PRINT_RESULTS      
+#ifndef PRINT_RESULTS      
 
 	float RealPart, ImaginaryPart, Magnitude, OtherMagnitude;
 
@@ -147,21 +170,25 @@ uint32_t  ping_fft(float fBinSize)
 	{
 		sprintf(cOutbuf, "[%6d]", ( uint32_t)(fBinSize * nJdx));
 		NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+		NRF_LOG_FLUSH();
 
 		sprintf(cOutbuf, "  %f", fFFTin[nJdx]);
 		NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+		NRF_LOG_FLUSH();
 
 		RealPart = fft_out[nIdx];
 
 		sprintf(cOutbuf, "  %f", RealPart);
 
 		NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+		NRF_LOG_FLUSH();
 
 		
 		ImaginaryPart = fft_out[nIdx+1];
 
 		sprintf(cOutbuf, "  %f", ImaginaryPart);
 		NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+		NRF_LOG_FLUSH();
 
 		Magnitude = abs(sqrt(RealPart*RealPart +  ImaginaryPart *ImaginaryPart));
 
@@ -169,6 +196,7 @@ uint32_t  ping_fft(float fBinSize)
 
 		sprintf(cOutbuf, "  %f %f\r\n", Magnitude, OtherMagnitude);
 		NRF_LOG_RAW_INFO("%s", (uint32_t) cOutbuf);
+		NRF_LOG_FLUSH();
 
 		nJdx++;
 

@@ -49,5 +49,4 @@
 
 #define I2S_ENABLED                     1
 
-
 #endif // APP_CONFIG_H

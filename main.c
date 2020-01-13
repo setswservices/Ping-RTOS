@@ -1,51 +1,4 @@
-/**
- * Copyright (c) 2014 - 2018, Nordic Semiconductor ASA
- * 
- * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted provided that the following conditions are met:
- * 
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 
- * 2. Redistributions in binary form, except as embedded into a Nordic
- *    Semiconductor ASA integrated circuit in a product or a software update for
- *    such product, must reproduce the above copyright notice, this list of
- *    conditions and the following disclaimer in the documentation and/or other
- *    materials provided with the distribution.
- * 
- * 3. Neither the name of Nordic Semiconductor ASA nor the names of its
- *    contributors may be used to endorse or promote products derived from this
- *    software without specific prior written permission.
- * 
- * 4. This software, with or without modification, must only be used with a
- *    Nordic Semiconductor ASA integrated circuit.
- * 
- * 5. Any software provided in binary form under this license must not be reverse
- *    engineered, decompiled, modified and/or disassembled.
- * 
- * THIS SOFTWARE IS PROVIDED BY NORDIC SEMICONDUCTOR ASA "AS IS" AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY, NONINFRINGEMENT, AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL NORDIC SEMICONDUCTOR ASA OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
- * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- */
-// Board/nrf6310/ble/ble_app_hrs_rtx/main.c
-/**
- *
- * @brief Heart Rate Service Sample Application with RTX main file.
- *
- * This file contains the source code for a sample application using RTX and the
- * Heart Rate service (and also Battery and Device Information services).
- * This application uses the @ref srvlib_conn_params module.
- */
+
 
 #include <stdint.h>
 #include <string.h>
@@ -1025,6 +978,49 @@ int16_t TestData[256] =
 };
 #endif  // CAPTURE
 
+uint32_t GetDominantIndex(void)
+{
+	uint16_t nIdx, nJdx;
+	uint32_t Dominant_Index;
+	float fBinSize = 0.0;
+
+	nJdx = 0;
+	nJdx = 0;
+
+	for(nIdx=0; nIdx < FFT_SAMPLE_SIZE * 2; nIdx += 2)
+	{
+
+		fFFTin[nJdx] = (float)  Rx_Buffer[nIdx];
+
+#ifdef PRINTIT
+		sprintf(cOutbuf, "%6.0f\r\n",fFFTin[nJdx]);
+		NRF_LOG_RAW_INFO("%s",cOutbuf);
+		NRF_LOG_FLUSH();
+#endif
+
+		nJdx++;
+	}
+
+	Dominant_Index = ping_fft(fBinSize);
+	return Dominant_Index;
+
+}
+
+//  temporal 3 or the T3 pattern, smoke detectors must generate an audible signal that consists of a three pulse tonal sequence of .5 second on and .5 second off 
+//  with an additional one second of silence following the third and final .5 second off portion of the cycle. One full T3 pattern takes four seconds to complete.
+
+// 500 msec of 3200 Hz
+// 500 msec of silence
+// 500 msec of 3200 Hz
+// 500 msec of silence
+// 500 msec of 3200 Hz
+// 1500 msec of silence
+// 500 msec of 3200 Hz
+// 500 msec of silence
+// 500 msec of 3200 Hz
+// 500 msec of silence
+// .
+// .
 
 uint32_t nKdx;
 
@@ -1035,6 +1031,16 @@ static void AppTask(void *pvParameters)
 	uint32_t err_code = NRF_SUCCESS;
 	uint16_t nIdx, nJdx;
 	uint32_t nSeed = 0;
+
+	static bool bBeenHere = false;
+	float fBinSize;
+	uint32_t Dominant_Index;
+	bool bGot3200HZ = false;
+
+	uint32_t BegTime, EndTime, DeltaTime=0;
+	uint32_t nIterations = 10;
+	uint16_t State = 1, LastState;
+	bool bDebugPrint = false;
 
 #if FUNCTION_START_DEBUG
 	NRF_LOG_RAW_INFO("%s Entering ..\r\n", (uint32_t) __func__);
@@ -1112,18 +1118,185 @@ static void AppTask(void *pvParameters)
 
 #endif
 
+// 500 msec of 3200 Hz
+// 500 msec of silence
+// 500 msec of 3200 Hz
+// 500 msec of silence
+// 500 msec of 3200 Hz
+// 1500 msec of silence
+// 500 msec of 3200 Hz
+
+
 	/////////////////////////////////////////////////////////////
-	//  State 1:  Indeterminate, listening for absence of 3200 Hz (dead zone)
-	//  State 2:  Heard 3200 Hz, note time and speed up sampling to 10 times a second
-	//  State 3:  Entered dead zone, keep sampling
-	//  State 4:  
+	//  State 1:  Indeterminate, listening 3200 Hz 
+	//  State 2:  Heard 3200 Hz, note time and speed up sampling to 20 times a second
+	//  State 3:  Entered absence of 3200 Hz, dead zone, keep sampling
+	//  State 4:  Heard 3200  Hz, note time and compute delta
+	//  State 5:  Delta was > 400 msec, keep listening
+	//  State 6:  Entered dead zone, note time and compute delta
+	//  State 7:  Delta was > 
+
+	State = 1;
+	bDebugPrint = true;
+
+	BegTime = ElapsedTimeInMilliseconds();
+
+	while(true)
+	{
+
+		// Signal that we want to capture
+		bDoCaptureRx = true;
+
+		// Wait for capture
+		while(bDoCaptureRx)   vTaskDelay((TickType_t)(pdMS_TO_TICKS(1)));
+			
+		Dominant_Index = GetDominantIndex();
+		
+		if((Dominant_Index >= 25) && (Dominant_Index <= 27)) 	bGot3200HZ = true;
+		else 												bGot3200HZ = false;
+
+		if(bDebugPrint && (LastState != State)) 
+		//if(bDebugPrint && (State != 1)) 
+		{
+			NRF_LOG_RAW_INFO("S %d, LS %d, DI=%d, TM=%d\r\n", State, LastState, Dominant_Index, DeltaTime);
+			//NRF_LOG_FLUSH();
+		}
+
+		LastState = State;
+		
+		switch(State)
+		{
+			
+			case 1:	// Indeterminate, listening 3200 Hz 
+					if(!bGot3200HZ) 
+					{
+						//NRF_LOG_RAW_INFO("DI = %d\r\n", Dominant_Index);
+						//NRF_LOG_FLUSH();
+						vTaskDelay((TickType_t)(pdMS_TO_TICKS(400)));		// Wait 400 msec
+					}
+					else 
+					{
+						EndTime = ElapsedTimeInMilliseconds();
+						DeltaTime = EndTime - BegTime;
+						BegTime = ElapsedTimeInMilliseconds();
+						State = 2;
+						
+					}
+					break;
+					
+			case 2:	// Heard 3200 Hz, note time and speed up sampling to 20 times a second
+
+					if(bGot3200HZ) vTaskDelay((TickType_t)(pdMS_TO_TICKS(25)));		// Wait 50 msec
+					else 
+					{
+						EndTime = ElapsedTimeInMilliseconds();
+						DeltaTime = EndTime - BegTime;
+						BegTime = ElapsedTimeInMilliseconds();
+						if((DeltaTime > 300) && (DeltaTime < 700))
+							State = 3;
+						else 
+							State = 1;		// Start over
+					}
+					break;
+					
+			case 3:	// Entered absence of 3200 Hz, dead zone, keep sampling
+						
+					if(!bGot3200HZ) vTaskDelay((TickType_t)(pdMS_TO_TICKS(25)));		// Wait 50 msec
+					else 
+					{
+						EndTime = ElapsedTimeInMilliseconds();
+						DeltaTime = EndTime - BegTime;
+						BegTime = ElapsedTimeInMilliseconds();
+						if((DeltaTime > 300) && (DeltaTime < 700))
+
+							State = 4;
+
+						else 
+							State = 1;		// Start over
+					}
+					break;
+
+			case 4:	// Heard 3200  Hz, note time and compute delta
+									
+					if(bGot3200HZ) vTaskDelay((TickType_t)(pdMS_TO_TICKS(25)));		// Wait 50 msec
+					else 
+					{
+						EndTime = ElapsedTimeInMilliseconds();
+						DeltaTime = EndTime - BegTime;
+						BegTime = ElapsedTimeInMilliseconds();
+						if((DeltaTime > 300) && (DeltaTime < 700))
+						
+							State = 5;
+
+						else 
+							State = 1;		// Start over
+					}
+					break;
+					
+			case 5:	// Entered absence of 3200 Hz, dead zone, keep sampling
+					
+					if(!bGot3200HZ) vTaskDelay((TickType_t)(pdMS_TO_TICKS(25)));		// Wait 50 msec
+					else 
+					{
+						EndTime = ElapsedTimeInMilliseconds();
+						DeltaTime = EndTime - BegTime;
+						BegTime = ElapsedTimeInMilliseconds();
+						if((DeltaTime > 300) && (DeltaTime < 700))
+						
+							State = 6;
+						else 
+							State = 1;		// Start over
+					}
+					break;
+
+			case 6:	// Heard 3200  Hz, note time and compute delta
+				
+					if(bGot3200HZ) vTaskDelay((TickType_t)(pdMS_TO_TICKS(25)));		// Wait 50 msec
+					else 
+					{
+						EndTime = ElapsedTimeInMilliseconds();
+						DeltaTime = EndTime - BegTime;
+						BegTime = ElapsedTimeInMilliseconds();
+						if((DeltaTime > 300) && (DeltaTime < 700))
+							State = 7;
+						
+						else 
+							State = 1;		// Start over
+					}
+					break;
+
+			case 7:	// Entered absence of 3200 Hz, dead zone, keep sampling
+
+					State = 1;
+					NRF_LOG_RAW_INFO("!!!  ALARM !!!\r\n", State);
+					break;
+							
+					if(!bGot3200HZ) vTaskDelay((TickType_t)(pdMS_TO_TICKS(25)));		// Wait 50 msec
+					else 
+					{
+						EndTime = ElapsedTimeInMilliseconds();
+						DeltaTime = EndTime - BegTime;
+						BegTime = ElapsedTimeInMilliseconds();
+						if((DeltaTime > 300) && (DeltaTime < 700))
+						{
+							State = 1;
+							NRF_LOG_RAW_INFO("!!!  ALARM !!!\r\n", State);
+						}
+						else 
+							State = 1;		// Start over
+					}
+					break;
+			
+			
+		}	
+
+
+	}
+
 
 	for (;;)
 	{
-		uint32_t nIdx, nJdx;
-		static bool bBeenHere = false;
-		float fBinSize;
-		uint32_t Dominant_Index;
+
 
 		if(ElapsedTimeInMilliseconds() > 1000)
 		{
@@ -1131,8 +1304,6 @@ static void AppTask(void *pvParameters)
 #ifdef CAPTURE
 			// Signal that we want to capture
 			bDoCaptureRx = true;
-
-			//NRF_LOG_RAW_INFO("StartTime = %d\r\n", ElapsedTimeInMilliseconds());
 
 			// Wait for capture
 			while(bDoCaptureRx)   vTaskDelay((TickType_t)(pdMS_TO_TICKS(1)));
@@ -1171,8 +1342,7 @@ static void AppTask(void *pvParameters)
 #endif
 
 
-			uint32_t BegTime, EndTime, DeltaTime;
-			uint32_t nIterations = 10;
+
 
 			BegTime = ElapsedTimeInMilliseconds();
 

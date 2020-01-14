@@ -173,70 +173,76 @@ int16_t *Current_RX_Buffer;
 bool bDoCaptureRx = false;
 uint32_t RxTimeBeg, RxTimeDelta;
 
+uint32_t NewI2sTime, OldI2sTime=0, DeltaI2sTime;
+
 /* I2S event handler. Based on the module state, will play sample, playback microphone data, or forward events to the application */
 static void i2s_data_handler(nrf_drv_i2s_buffers_t const * p_released,
                          uint32_t                      status)
 {
-    if (!(status & NRFX_I2S_STATUS_NEXT_BUFFERS_NEEDED))
-    {
-        return;
-    }
-    
-    if (p_released == NULL) 
-    {
-        // Regardless of module state, when p_released is NULL, we provide the next buffers (to keep implementation a little simpler)
-        nrf_drv_i2s_buffers_t const next_buffers = {
-            .p_rx_buffer = &m_external_i2s_buffer.rx_buffer[m_external_i2s_buffer.buffer_size_words/2],
-            .p_tx_buffer = &m_external_i2s_buffer.tx_buffer[m_external_i2s_buffer.buffer_size_words/2],
-        };
-        APP_ERROR_CHECK(nrf_drv_i2s_next_buffers_set(&next_buffers));
-        
-        //  i2s_data_handler_old(NULL, &m_external_i2s_buffer.tx_buffer[m_external_i2s_buffer.buffer_size_words/2], m_external_i2s_buffer.buffer_size_words/2);
-    }
-    else if (p_released->p_rx_buffer == NULL)
-    {
 
-	NRF_LOG_RAW_INFO("RX is NULL\r\n");
-	
-        // If RX buffer is NULL, no data has been received, and we need to provide the next buffers. Nothing else done (to keep implementation a little simpler).
-        nrf_drv_i2s_buffers_t const next_buffers = {
-            .p_rx_buffer = &m_external_i2s_buffer.rx_buffer[m_external_i2s_buffer.buffer_size_words/2],
-            .p_tx_buffer = &m_external_i2s_buffer.tx_buffer[m_external_i2s_buffer.buffer_size_words/2],
-        };
-        APP_ERROR_CHECK(nrf_drv_i2s_next_buffers_set(&next_buffers));
-        
-        i2s_data_handler_old(NULL, &m_external_i2s_buffer.tx_buffer[m_external_i2s_buffer.buffer_size_words/2], m_external_i2s_buffer.buffer_size_words/2);
-    }
-    else
-    {
+	NewI2sTime = ElapsedTimeInMilliseconds();
+	DeltaI2sTime = NewI2sTime - OldI2sTime;
+	OldI2sTime = NewI2sTime;
 
-	Num_Mic_Samples++;
-		
-        if (m_state == SGTL5000_STATE_RUNNING)
-        {
-		if(bDoCaptureRx)
+	if (!(status & NRFX_I2S_STATUS_NEXT_BUFFERS_NEEDED))
+	{
+		return;
+	}
+
+	if (p_released == NULL) 
+	{
+		// Regardless of module state, when p_released is NULL, we provide the next buffers (to keep implementation a little simpler)
+		nrf_drv_i2s_buffers_t const next_buffers = {
+		.p_rx_buffer = &m_external_i2s_buffer.rx_buffer[m_external_i2s_buffer.buffer_size_words/2],
+		.p_tx_buffer = &m_external_i2s_buffer.tx_buffer[m_external_i2s_buffer.buffer_size_words/2],
+		};
+		APP_ERROR_CHECK(nrf_drv_i2s_next_buffers_set(&next_buffers));
+
+		//  i2s_data_handler_old(NULL, &m_external_i2s_buffer.tx_buffer[m_external_i2s_buffer.buffer_size_words/2], m_external_i2s_buffer.buffer_size_words/2);
+	}
+	else if (p_released->p_rx_buffer == NULL)
+	{
+
+		NRF_LOG_RAW_INFO("RX is NULL\r\n");
+
+		// If RX buffer is NULL, no data has been received, and we need to provide the next buffers. Nothing else done (to keep implementation a little simpler).
+		nrf_drv_i2s_buffers_t const next_buffers = {
+		.p_rx_buffer = &m_external_i2s_buffer.rx_buffer[m_external_i2s_buffer.buffer_size_words/2],
+		.p_tx_buffer = &m_external_i2s_buffer.tx_buffer[m_external_i2s_buffer.buffer_size_words/2],
+		};
+		APP_ERROR_CHECK(nrf_drv_i2s_next_buffers_set(&next_buffers));
+
+		i2s_data_handler_old(NULL, &m_external_i2s_buffer.tx_buffer[m_external_i2s_buffer.buffer_size_words/2], m_external_i2s_buffer.buffer_size_words/2);
+	}
+	else
+	{
+
+		Num_Mic_Samples++;
+
+		if (m_state == SGTL5000_STATE_RUNNING)
 		{
+			if(bDoCaptureRx)
+			{
 
-			//NRF_LOG_RAW_INFO("Capturing!!\r\n");  
-			//NRF_LOG_FLUSH();
-		
-			RxTimeBeg = ElapsedTimeInMilliseconds();
-			Current_RX_Buffer = (int16_t *) p_released->p_rx_buffer ;
+				//NRF_LOG_RAW_INFO("Capturing!!\r\n");  
+				//NRF_LOG_FLUSH();
 
-			// Capture sample
-			memcpy(Rx_Buffer, Current_RX_Buffer, FFT_SAMPLE_SIZE * sizeof(uint32_t));
-			bDoCaptureRx = false;
+				RxTimeBeg = ElapsedTimeInMilliseconds();
+				Current_RX_Buffer = (int16_t *) p_released->p_rx_buffer ;
 
-			RxTimeDelta = ElapsedTimeInMilliseconds() -RxTimeBeg ;
+				// Capture sample
+				memcpy(Rx_Buffer, Current_RX_Buffer, FFT_SAMPLE_SIZE * sizeof(uint32_t));
+				bDoCaptureRx = false;
+
+				RxTimeDelta = ElapsedTimeInMilliseconds() -RxTimeBeg ;
+			}
 		}
-
-        }
-        else 
-        {
-            // We do not handle this scenario
-        }
-    }
-}
+		else 
+		{
+		// We do not handle this scenario
+		}
+	}
+	}
 
 
 /* EGU interrupt handler. This handler will take care of stopping the I2S peripheral when requested. */

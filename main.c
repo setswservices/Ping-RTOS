@@ -978,11 +978,17 @@ int16_t TestData[256] =
 };
 #endif  // CAPTURE
 
-uint32_t GetDominantIndex(void)
+uint32_t GetDominantIndexSolo(void)
 {
 	uint16_t nIdx, nJdx;
 	uint32_t Dominant_Index;
 	float fBinSize = 0.0;
+
+	// Signal that we want to capture
+	bDoCaptureRx = true;
+
+	// Wait for capture
+	while(bDoCaptureRx)   vTaskDelay((TickType_t)(pdMS_TO_TICKS(0)));
 
 	nJdx = 0;
 	nJdx = 0;
@@ -1006,6 +1012,28 @@ uint32_t GetDominantIndex(void)
 
 }
 
+// Get two values in a row
+
+uint32_t GetDominantIndex(void)
+{
+	uint16_t nIdx, nJdx;
+	uint32_t Dominant_Index, LastDominant_Index;
+	float fBinSize = 0.0;
+
+	LastDominant_Index = 9999;
+
+	while(true)
+	{
+		Dominant_Index = GetDominantIndexSolo();
+		if(Dominant_Index != 25) Dominant_Index = 0;
+		if(Dominant_Index == LastDominant_Index) break;
+		LastDominant_Index = Dominant_Index;
+	}
+
+	return Dominant_Index;
+
+}
+
 //  temporal 3 or the T3 pattern, smoke detectors must generate an audible signal that consists of a three pulse tonal sequence of .5 second on and .5 second off 
 //  with an additional one second of silence following the third and final .5 second off portion of the cycle. One full T3 pattern takes four seconds to complete.
 
@@ -1024,6 +1052,30 @@ uint32_t GetDominantIndex(void)
 
 uint32_t nKdx;
 
+extern uint32_t NewI2sTime, OldI2sTime, DeltaI2sTime;
+
+void TurnOnLEDs(void)
+{
+	uint16_t nJdx;
+	// Turn On LEDs
+	for(nJdx=LED_1; nJdx <= LED_4; nJdx++)  
+	{
+		//NRF_LOG_RAW_INFO("LED %d OFF\r\n", nJdx);
+		nrf_gpio_pin_clear(nJdx);
+	}
+}
+
+void TurnOffLEDs(void)
+{
+	uint16_t nJdx;
+	// Turn Off LEDs
+	for(nJdx=LED_1; nJdx <= LED_4; nJdx++)  
+	{
+		//NRF_LOG_RAW_INFO("LED %d OFF\r\n", nJdx);
+		nrf_gpio_pin_set(nJdx);
+	}
+}
+
 static void AppTask(void *pvParameters)
 {
 	(void)pvParameters;
@@ -1038,8 +1090,10 @@ static void AppTask(void *pvParameters)
 	bool bGot3200HZ = false;
 
 	uint32_t BegTime, EndTime, DeltaTime=0;
+	uint32_t BegCapture, EndCapture, DeltaCapture=0;
+	
 	uint32_t nIterations = 10;
-	uint16_t State = 1, LastState;
+	uint16_t State = 1, LastState=0;
 	bool bDebugPrint = false;
 
 #if FUNCTION_START_DEBUG
@@ -1144,23 +1198,34 @@ static void AppTask(void *pvParameters)
 	while(true)
 	{
 
+		BegCapture = ElapsedTimeInMilliseconds();
+
 		// Signal that we want to capture
-		bDoCaptureRx = true;
+		//bDoCaptureRx = true;
 
 		// Wait for capture
-		while(bDoCaptureRx)   vTaskDelay((TickType_t)(pdMS_TO_TICKS(1)));
+		//while(bDoCaptureRx)   vTaskDelay((TickType_t)(pdMS_TO_TICKS(0)));
+
 			
 		Dominant_Index = GetDominantIndex();
-		
-		if((Dominant_Index >= 25) && (Dominant_Index <= 27)) 	bGot3200HZ = true;
-		else 												bGot3200HZ = false;
+										
+		EndCapture = ElapsedTimeInMilliseconds();
 
-		if(bDebugPrint && (LastState != State)) 
-		//if(bDebugPrint && (State != 1)) 
+		DeltaCapture = EndCapture - BegCapture;
+	
+		if(bDebugPrint && (LastState != State))  
 		{
-			NRF_LOG_RAW_INFO("S %d, LS %d, DI=%d, TM=%d\r\n", State, LastState, Dominant_Index, DeltaTime);
+			if(State==1) NRF_LOG_RAW_INFO("\r\n");
+			NRF_LOG_RAW_INFO("S %d, LS %d (%s)", State, LastState, bGot3200HZ?"QUIET":"TONE");
+			NRF_LOG_RAW_INFO(", DI=%d, TM=%d, CT=%d, I2ST=%d, NT=%d\r\n", Dominant_Index, DeltaTime, DeltaCapture, DeltaI2sTime, ElapsedTimeInMilliseconds());
+
 			//NRF_LOG_FLUSH();
 		}
+
+		if((Dominant_Index >= 25) && (Dominant_Index <= 27)) 	
+			bGot3200HZ = true;
+		else 	
+			bGot3200HZ = false;
 
 		LastState = State;
 		
@@ -1168,19 +1233,23 @@ static void AppTask(void *pvParameters)
 		{
 			
 			case 1:	// Indeterminate, listening 3200 Hz 
+					TurnOffLEDs();
 					if(!bGot3200HZ) 
 					{
 						//NRF_LOG_RAW_INFO("DI = %d\r\n", Dominant_Index);
 						//NRF_LOG_FLUSH();
-						vTaskDelay((TickType_t)(pdMS_TO_TICKS(400)));		// Wait 400 msec
+						vTaskDelay((TickType_t)(pdMS_TO_TICKS(25)));		// Wait 400 msec
 					}
 					else 
 					{
 						EndTime = ElapsedTimeInMilliseconds();
 						DeltaTime = EndTime - BegTime;
 						BegTime = ElapsedTimeInMilliseconds();
-						State = 2;
-						
+
+						if(DeltaTime > 600)	// We were in a long silence
+							State = 2;
+						else 				
+							State = 1;		// We were in a short silence, or in tone, stay here					
 					}
 					break;
 					
@@ -1242,7 +1311,6 @@ static void AppTask(void *pvParameters)
 						DeltaTime = EndTime - BegTime;
 						BegTime = ElapsedTimeInMilliseconds();
 						if((DeltaTime > 300) && (DeltaTime < 700))
-						
 							State = 6;
 						else 
 							State = 1;		// Start over
@@ -1257,11 +1325,23 @@ static void AppTask(void *pvParameters)
 						EndTime = ElapsedTimeInMilliseconds();
 						DeltaTime = EndTime - BegTime;
 						BegTime = ElapsedTimeInMilliseconds();
-						if((DeltaTime > 300) && (DeltaTime < 700))
-							State = 7;
+						//if((DeltaTime > 300) && (DeltaTime < 700))
+
+									
+			{
+					NRF_LOG_RAW_INFO("!!!  ALARM !!!\r\n", State);
+					BegTime = ElapsedTimeInMilliseconds();
+					State = 1;
+					TurnOnLEDs();
+					vTaskDelay((TickType_t)(pdMS_TO_TICKS(100)));		// Wait 50 msec
+					break;
+
+					
+			}
+
 						
-						else 
-							State = 1;		// Start over
+						//else 
+							//State = 1;		// Start over
 					}
 					break;
 
@@ -1269,6 +1349,7 @@ static void AppTask(void *pvParameters)
 
 					State = 1;
 					NRF_LOG_RAW_INFO("!!!  ALARM !!!\r\n", State);
+					BegTime = ElapsedTimeInMilliseconds();
 					break;
 							
 					if(!bGot3200HZ) vTaskDelay((TickType_t)(pdMS_TO_TICKS(25)));		// Wait 50 msec

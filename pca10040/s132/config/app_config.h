@@ -49,4 +49,12 @@
 
 #define I2S_ENABLED                     1
 
+#define NRF_LOG_BUFSIZE   8192
+#define NRF_LOG_DEFERRED  0
+	
+#define NRF_LOG_BACKEND_RTT_ENABLED	1
+#define NRF_LOG_BACKEND_UART_ENABLED	0
+
+#define FUNCTION_START_DEBUG            1
+
 #endif // APP_CONFIG_H

@@ -1080,6 +1080,8 @@ static void AppTask(void *pvParameters)
 {
 	(void)pvParameters;
 
+         NRF_LOG_INFO("XXXX smoke alarm started.");
+
 	uint32_t err_code = NRF_SUCCESS;
 	uint16_t nIdx, nJdx;
 	uint32_t nSeed = 0;
@@ -1094,7 +1096,7 @@ static void AppTask(void *pvParameters)
 	
 	uint32_t nIterations = 10;
 	uint16_t State = 1, LastState=0;
-	bool bDebugPrint = false;
+	bool bDebugPrint = true;
 
 #if FUNCTION_START_DEBUG
 	NRF_LOG_RAW_INFO("%s Entering ..\r\n", (uint32_t) __func__);
@@ -1236,8 +1238,8 @@ static void AppTask(void *pvParameters)
 					TurnOffLEDs();
 					if(!bGot3200HZ) 
 					{
-						//NRF_LOG_RAW_INFO("DI = %d\r\n", Dominant_Index);
-						//NRF_LOG_FLUSH();
+						NRF_LOG_RAW_INFO("DI = %d\r\n", Dominant_Index);
+						NRF_LOG_FLUSH();
 						vTaskDelay((TickType_t)(pdMS_TO_TICKS(25)));		// Wait 400 msec
 					}
 					else 
@@ -1538,7 +1540,7 @@ int main(void)
     // The task will run advertising_start() before entering its loop.
     nrf_sdh_freertos_init(advertising_start, &erase_bonds);
 
-    NRF_LOG_INFO("HRS FreeRTOS example started.");
+    NRF_LOG_INFO("Ping smoke alarm started.");
 
 	AppStart(APP_STACKSIZE, 	APP_PRIORITY);
 	
